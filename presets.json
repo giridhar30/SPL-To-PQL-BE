@@ -1,0 +1,231 @@
+{
+    "| dataset": [
+        {
+            "role": "system",
+            "content": "You should convert Splunk SPL to Scalyr DataSet PQL. The first few conversations will have the converted PQL. When only the SPL is given, you have to convert it to PQL. index field should be converted to serverHost. All PQL commands must start with this: | dataset method=powerquery maxcount=100000 search=\". All query must have | spath after the search field. If SPL contains timechart, then add | fillnull as the last line in PQL. Learn other conditions with the sample sets of SPL and PQL queries. "
+        },
+        {
+            "role": "user",
+            "content": "index=\"cc_apps\"  host=\"$stack$*\" \"CaptionCallHoldServerLib.CaptionCallHoldServerLib\" (\"Accepting the call\" OR \"Redirecting (transferring) call to\")\n| eval CallState=if(searchmatch(\"(Accepting the call)\"),\"Incoming\",\"Transferring\")\n| eval CallStateAndHost = host + \" - \" + CallState\n| timechart count by CallStateAndHost"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps'  host contains '$stack$' Logger contains 'CaptionCallHoldServerLib.CaptionCallHoldServerLib' (CallBridgeTrace contains 'Accepting the call' or CallBridgeTrace contains 'Redirecting (transferring) call to') \n| let CallState=(CallBridgeTrace contains 'Accepting the call') ? 'Incoming' : 'Transferring', CallStateAndHost = host + ' - ' + CallState\n| group count=count() by timestamp=timebucket('1m'), CallStateAndHost\" \n| spath \n| timechart sum(count) by CallStateAndHost\n| fillnull"
+        },
+        {
+            "role": "user",
+            "content": "index=\"cc_apps\" host=\"$stack$-cc-tux*\" Message!=\"PushCalls loop complete.\" Message!=\"Pushed call to agent.\" Message!=\"Time elapsed to*\"\n| chart count by host"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host contains '$stack$-cc-tux' Message!='PushCalls loop complete.' Message!='Pushed call to agent.' !(Message contains 'Time elapsed to')\n| group count=count() by host\"\n| spath\n| chart sum(count) by host"
+        },
+        {
+            "role": "user",
+            "content": "index=cc_apps host=\"$stack$*hold*\" OR host=\"$stack$*tux*\" \"ERROR\"\n| timechart count by host"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' (host contains 'hold' or host contains 'tux') host contains '$stack$' 'ERROR' \n| group count=count() by timestamp=timebucket('1m'), host\" \n| spath \n| timechart sum(count) by host\n| fillnull"
+        },
+        {
+            "role": "user",
+            "content": "index=cc_apps sourcetype=DBtable source=\"*IdleCounts\"\n| timechart sum(SpanishIdleCount) as \"Spanish\", sum(EnglishIdleCounts) as \"English\""
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' sourcetype contains 'DBtable' source contains 'IdleCounts'\n| group EnglishCount=sum(EnglishIdleCounts), SpanishCount=sum(SpanishIdleCount) by timestamp=timebucket('1m')\"\n| spath\n| timechart sum(SpanishCount) as \"Spanish\", sum(EnglishCount) as \"English\"\n| fillnull"
+        },
+        {
+            "role": "user",
+            "content": "index=cc_apps host=\"$stack$-CC-TUX5\" Message=\"PushCalls loop complete.\"\n| timechart  avg(CallsRetrieved) as \"Pulled (avg)\", sum(PushedCount) as \"Pushed (sum)\""
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host contains '$stack$-CC-TUX5' Message contains 'PushCalls loop complete.'\n| group CallsRetrieved=average(CallsRetrieved), PushedCount=sum(PushedCount) by timestamp=timebucket('1m')\"\n| spath\n| timechart  avg(CallsRetrieved) as \"Pulled (avg)\", sum(PushedCount) as \"Pushed (sum)\""
+        },
+        {
+            "role": "user",
+            "content": "index=cc_perfmon host=\"$stack$*hold*\" OR host=\"$stack$*tux*\"\ncollection=\"Available Memory\"\nobject=Memory\ncounter=\"% Committed Bytes in Use\"\n| timechart avg(Value) by host"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_perfmon' (host contains 'hold' or host contains 'tux') host contains '$stack$' collection='Available Memory' object='Memory' counter='% Committed Bytes in Use'\n| group avg(Value) by timestamp=timebucket('1m'), host\"\n| spath\n| timechart avg(avg_Value) by host\n| fillnull"
+        },
+        {
+            "role": "user",
+            "content": "The conversion is almost accurate. Just assign the grouped average value to avg_Value as below:\n\n| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_perfmon' (host contains 'hold' or host contains 'tux') host contains '$stack$' collection='Available Memory' object='Memory' counter='% Committed Bytes in Use'\n| group avg_Value=avg(Value) by timestamp=timebucket('1m'), host\"\n| spath\n| timechart avg(avg_Value) by host\n| fillnull"
+        },
+        {
+            "role": "assistant",
+            "content": "Apologies for the oversight. Here's the corrected conversion:\n\n| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_perfmon' (host contains 'hold' or host contains 'tux') host contains '$stack$' collection='Available Memory' object='Memory' counter='% Committed Bytes in Use'\n| group avg_Value=avg(Value) by timestamp=timebucket('1m'), host\"\n| spath\n| timechart avg(avg_Value) by host\n| fillnull"
+        },
+        {
+            "role": "user",
+            "content": "index=cc_perfmon source=\"Perfmon:Network Interface\" counter=\"Bytes Sent/sec\" host=\"$stack$*hold*\" OR host=\"$stack$*tux*\"\n| eval MB=Value/1024/1024 \n| timechart span=1m avg(MB) by host"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=5000 search=\"serverHost='cc_perfmon' counter contains 'Bytes Sent/sec' source contains 'Perfmon:Network Interface' host contains '$stack$' (host contains 'hold' or host contains 'tux')\n| let MB=Value/1024/1024\n| group MB=avg(MB) by timestamp=timebucket('1m'), host\"\n| spath\n| timechart span=1m avg(MB) by host"
+        },
+        {
+            "role": "user",
+            "content": "index=\"cc_apps\" host=\"MESvA-VCA032\" \"Asr connection lost.  Reconnecting attempt\" |stats distinct_count(CallId)"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host='MESvA-VCA032' 'Asr connection lost.  Reconnecting attempt'\n| columns CallId\"\n| spath\n| stats distinct_count(CallId)"
+        },
+        {
+            "role": "user",
+            "content": "index=\"cc_apps\" host=\"MESvA-VCA032\" \"Call Completed\"|timechart span=1m values(InterpretingTimeSeconds) by host"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host='MESvA-VCA032' 'Call Completed'\n| columns InterpretingTimeSeconds, host, timestamp=timebucket('1m')\"\n| spath\n| timechart span=1m values(InterpretingTimeSeconds) by host\n| fillnull"
+        },
+        {
+            "role": "user",
+            "content": "index=vrs_server OR index=vrs_client $lookupKey$\"$lookupValue$\" | search CallId |dedup CallId | table _time,VcoType,CallId"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"(serverHost='vrs_server' or serverHost='vrs_client') CallId!=null VcoType!=null $lookupKey$'$lookupValue$' \n| group count() by timestamp=timebucket('1m'), VcoType, CallId \n| columns timestamp, VcoType, CallId\" \n| spath \n| dedup CallId \n| table _time, VcoType, CallId"
+        },
+        {
+            "role": "user",
+            "content": "index=cc_Perfmon host=$Picked$ collection=\"Available Memory\"\nobject=Memory\ncounter=\"% Committed Bytes in Use\"\n| timechart avg(Value) by host"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_Perfmon' host='$Picked$' collection='Available Memory' object='Memory' counter='% Committed Bytes in Use'\n| group avg_Value=avg(Value) by timestamp=timebucket('1m'), host\"\n| spath\n| timechart avg(avg_Value) by host\n| fillnull"
+        },
+        {
+            "role": "user",
+            "content": "index=vp_callstatslogs ProductName=\"Sorenson Videophone *\"\n| fieldsummary\n| fields field\n| dedup field\n| where field!=\"ProductName\""
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='vp_callstatslogs' ProductName contains 'Sorenson Videophone' \n| fieldsummary\n| fields field\n| dedup field\n| where field!='ProductName'\""
+        },
+        {
+            "role": "user",
+            "content": "Above conversion is wrong and the following is the correct conversion. Implement that from next search onwards:\n\n| dataset method=powerquery maxcount=100000 search=\"serverHost='vp_callstatslogs' ProductName contains 'Sorenson Videophone '\"\n| spath\n| fieldsummary\n| fields field\n| dedup field\n| where field!=\"ProductName\""
+        },
+        {
+            "role": "assistant",
+            "content": "Apologies for the incorrect conversion. Here's the corrected version:\n\n| dataset method=powerquery maxcount=100000 search=\"serverHost='vp_callstatslogs' ProductName contains 'Sorenson Videophone '\"\n| spath\n| fieldsummary\n| fields field\n| dedup field\n| where field!=\"ProductName\""
+        },
+        {
+            "role": "user",
+            "content": "index=\"cc_apps\" host=\"$stack$-cc-tux*\" Message=\"Relay configuration.\"\n| head 1\n| table CalleeRoutingExpression, DeafRoutingExpression, OverflowToVirtualAgents, MaxCallsToPush, MaxCallsToRetrieve, PushCallTimeout"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host contains '$stack$-CC-TUX' Message='Relay configuration.' \n| limit 1 \n| columns CalleeRoutingExpression, DeafRoutingExpression, OverflowToVirtualAgents, MaxCallsToPush, MaxCallsToRetrieve, PushCallTimeout\" \n| spath \n| table CalleeRoutingExpression, DeafRoutingExpression, OverflowToVirtualAgents, MaxCallsToPush, MaxCallsToRetrieve, PushCallTimeout"
+        },
+        {
+            "role": "user",
+            "content": "index=cc_apps host=$stack$-vca* sourcetype=\"VCA\" Message=\"Call Completed\"\n| stats count by TerminationType"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host contains '$stack$-vca' sourcetype='VCA' Message='Call Completed'\n| group count=count() by TerminationType\" \n| spath \n| stats sum(count) by TerminationType"
+        }
+    ],
+    "powerquery": [],
+    "inputlookup": [
+        {
+            "role": "system",
+            "content": "All eval in SPL  should be replaced with let in PQL\nAny line starting with \u2018 index= \u2018 is a query and must be prefixed with \u201c dataset method=powerquery maxcount=100000 \u201c\nAll query must have |spath \n| input lookup should be after the |spath \nThe content after spath in PQL is SPL command\nTreat the query in square brackets after a append statement as a separate query and convert it and replace it\nIf the last line is timechart then add fillnull as the last line"
+        },
+        {
+            "role": "user",
+            "content": "I will give the SPL and the Equivalent PQL code. Convert the SPL that I ask to convert later yourself"
+        },
+        {
+            "role": "user",
+            "content": "SPL:\nindex=cc_perfmon sourcetype=\"Perfmon:CPU Load\" \n        [| inputlookup $stack2$EntMonitoring \n        | fields host ] counter=\"% Processor Time\" \n    | eval CPU=avg(Value) \n    | eval Metric=round(CPU,1) \n    | eval Result=\"Fine\" \n    | eval Result=if(CPU> 80, \"CPU High\", Result) \n    | eval ErrorMessage=\"CPU Above Threshold of 80% - CPU at \"+Metric+\"%\"\nPQL:\n| dataset method=powerquery maxcount=100000  search=\"index='cc_perfmon' sourcetype='Perfmon:CPU Load' (counter=\u2018% Processor Time\u2019)\n| let CPU = overall_avg(Value)\n| let Metric= CPU \n| let Result1=\u2018Fine\u2019\n| let Result = CPU>80 ? \u2019 High\u2019 : Result1\n| let ErrorMessage=\u2018CPU Above Threshold of 80% - CPU at \u2018+Metric+\u2019%\u2019\n| columns Result, host, ErrorMessage\u201d\n| spath\n| search [| inputlookup $stack2$EntMonitoring\n| fields host]\nSPL:\n\nindex=cc_perfmon \n        [| inputlookup $stack$RelayMonitoring \n        | fields host ] object=\"Memory\" counter=\"% Committed Bytes in Use\" \n    | rename Value as RAM \n    | eval Metric=round(RAM,1) \n    | eval Result=\"Fine\" \n    | eval Result=if(RAM> 80, \"Memory High\", Result) \n    | eval ErrorMessage=\"Memory Above Threshold of 80% - RAM at \"+Metric+\"%\"\n\nPQL:\n| dataset method=powerquery maxcount=100000\nsearch=\"serverHost='cc_perfmon' (object='Memory' counter='% Committed Bytes in Use')          \n| let RAM=Value\n| let Metric=RAM\n| let Result1= \u2018Find\u2019\n| let Result = RAM>80 ? \u2018Memory High\u2019 : Result1\n| let ErrorMessage=\"Memory Above Threshold of 80% - RAM at \u2018+Metric+\u2019%\u2019\n| columns Result, host, ErrorMessage\u201d\n| spath\n| search [| inputlookup $stack$RelayMonitoring\n| fields host]"
+        },
+        {
+            "role": "user",
+            "content": "SPL:\nindex=cc_perfmon sourcetype=\"Perfmon:CPU Load\" \n        [| inputlookup $stack$RelayMonitoring \n        | fields host ] counter=\"% Processor Time\"  \n    | eval CPU=avg(Value) \n    | eval Metric=round(CPU,1) \n    | eval Result=\"Fine\" \n    | eval Result=if(CPU> 80, \"CPU High\", Result) \n    | eval ErrorMessage=\"CPU Above Threshold of 80% - CPU at \"+Metric+\"%\""
+        },
+        {
+            "role": "assistant",
+            "content": "PQL:\n| dataset method=powerquery maxcount=100000\nsearch=\"index='cc_perfmon' sourcetype='Perfmon:CPU Load' (counter=\"% Processor Time\")\n| let CPU = overall_avg(Value)\n| let Metric=CPU\n| let Result1=\u2018Fine\u2019\n| let Result = CPU>80 ? \"\u2019 High\u2019 : Result1\n| let ErrorMessage=\u2018CPU Above Threshold of 80% - CPU at \u2018+Metric+\u2019%\u2019\n| columns host, Result, ErrorMessage\u201d\n| spath\n| search [| inputlookup $stack$RelayMonitoring\n| fields host]"
+        },
+        {
+            "role": "user",
+            "content": "SPL:\nindex=cc_perfmon \n        sourcetype=\"Perfmon:Free Disk Space\" \n        [| inputlookup $stack$RelayMonitoring \n        | fields host ] counter=\"% Free Space\" \"instance=C:\" OR \"instance=D:\" \n    | eval Result=\"Fine\" \n    | eval Drive=instance \n    | eval Result=if(Value<20, \"Low on Disk Space\", Result) \n    | eval Space=round(Value,1) \n    | eval ErrorMessage=Space+\"% Disk Space Left On \"+Drive "
+        },
+        {
+            "role": "assistant",
+            "content": "PQL:\n| dataset method=powerquery maxcount=100000\nsearch=\u201cindex='cc_perfmon' sourcetype='Perfmon:Free Disk Space' (counter= '% Free Space ' ' instance=C:' OR ' instance=D:')\n| let Result1=\u2018Value\u2019\n| let Drive=instance\n| let Result= Value<20 ? \u2018Low on Disk Space\u2019 : Result1\n| let Space=round(Value,1)\n| let ErrorMessage=Space+\u2019% Disk Space Left On \u2018+Drive\n| columns host, ErrorMessage, Result\u201d\n| spath\n| search [| inputlookup $stack$RelayMonitoring\n| fields host]"
+        },
+        {
+            "role": "user",
+            "content": "SPL:\nindex=cc_windows Type=Process host=$stack$-CC-TUX* Name=\"ConfigurationServerApp.exe\" \n    | stats count as Value by host \n    | eval Result=\"Stopped\" \n    | eval Result=if(Value>0, \"Fine\", Result) \n    | eval ErrorMessage=\"ConfigurationServerApp.exe has stopped.\" "
+        },
+        {
+            "role": "assistant",
+            "content": "PQL:\n| dataset method=powerquery maxcount=100000\nsearch=\"index='cc_windows' Type='Process' host='$stack$-CC-TUX' Name='ConfigurationServerApp.exe'\n| group Value = count() by host\n| let Result1=\u2018Stopped\u2019\n| let Result=Value>0 ? \u2018Fine\u2019 : Result1\n| let ErrorMessage=\u2018ConfigurationServerApp.exe has stopped.\u2019\n| columns host, ErrorMessage, Result\u201d\n| spath\n| table host,ErrorMessage,Result"
+        },
+        {
+            "role": "user",
+            "content": "SPL:\nindex=cc_perfmon host=*sv* \n    | dedup host \n    | eval host=lower(host) \n    | stats count BY host \n        [| inputlookup $stack$RelayMonitoring\n        | eval host=lower(host), count=0 \n        | fields host count ] \n    | stats sum(count) AS total BY host \n    | eval status=if(total=0,\"Splunk Service or Server Down\",\"Up\") \n    | rename status as ErrorMessage \n    | where ErrorMessage!=\"Up\" ] "
+        },
+        {
+            "role": "assistant",
+            "content": "PQL:\n| dataset method=powerquery maxcount=100000\nsearch=\u201cindex='cc_perfmon' host='sv'\n| dedup host\n| let host=lower(host)\n| stats count by host\n| stats sum(count) as total by host\n| let status=total=0 ? 'Splunk Service or Server Down\u2019 : 'Up'\u201d\n| spath\n| search [| inputlookup $stack$RelayMonitoring\n| let host=lower(host), count=0\n| fields host, count]\n| rename status as ErrorMessage\n| where ErrorMessage!='Up\u2019"
+        },
+        {
+            "role": "user",
+            "content": "SPL:\n\"index=cc_windows source=services host!=\"lisva-cc-Hold2\"          [| inputlookup $stack$RelayMonitoring          | fields host ] Name=\"CaptionCallHoldServer.3.2.7\" OR \"TUXEDO 10gR3 with VS2005 Listener on Port 3050\" OR \"ORACLE ProcMGR V10gR3 with VS2005\" State=\"Stopped\" earliest=-5m      | rename Name as Message      | eval ErrorMessage=Message+\" has Stopped.\"  | append      [ search index=cc_windows source=services          [| inputlookup $stack2$EntMonitoring where Monitor=ON          | fields host ] Name=\"W3SVC\" OR \"CaptionCall: EPBS Web Service Cron 2.1.338.0\" OR \"Gups.WebServiceCron\" OR \"EPNS.WebServiceCron\" State=\"Stopped\" earliest=-5m      | rename Name as Message      | eval ErrorMessage=Message+\" has Stopped.\"]| append      [ search index=cc_windows source=services          [| inputlookup WebMonitoring where Monitor=ON| inputlookup StaticServersMonitoring append=t where Monitor=ON         | fields host] Name=\"W3SVC\" OR \"ONYX.OGS.AccountManagerView\" OR \"NICERTAService.exe\" State=\"Stopped\" earliest=-5m      | rename Name as Message      | eval ErrorMessage=Message+\" has Stopped.\"] |  stats count as Alarms\""
+        },
+        {
+            "role": "assistant",
+            "content": "PQL:\n\"| dataset method=powerquery maxcount=100000 starttime=\"5m\" search=\"serverHost='cc_windows' source='services' host!='lisva-cc-Hold2' (Name='CaptionCallHoldServer.3.2.7' OR 'TUXEDO 10gR3 with VS2005 Listener on Port 3050' OR 'ORACLE ProcMGR V10gR3 with VS2005') State='Stopped' | let ErrorMessage = Name + ' has Stopped.' | columns host , ErrorMessage\" | spath | search [| inputlookup $stack$RelayMonitoring         | fields host] | append      [| dataset method=powerquery maxcount=100000 starttime=\"5m\" search=\"serverHost='cc_windows' source='services' (Name='W3SVC' OR 'CaptionCall: EPBS Web Service Cron 2.1.338.0' OR 'Gups.WebServiceCron' OR 'EPNS.WebServiceCron') State='Stopped' | let ErrorMessage = Name + ' has Stopped.' | columns host , ErrorMessage\"     | spath     | search [| inputlookup $stack2$EntMonitoring where Monitor=ON          | fields host ]     ] | append     [| dataset method=powerquery maxcount=100000 starttime=\"5m\" search=\"serverHost='cc_windows' source='services' (Name='W3SVC' OR 'ONYX.OGS.AccountManagerView' OR 'NICERTAService.exe') State='Stopped' | let ErrorMessage = Name + ' has Stopped.' | columns host , ErrorMessage\"     | spath     | search  [| inputlookup WebMonitoring where Monitor=ON| inputlookup StaticServersMonitoring append=t where Monitor=ON         | fields host]     ] | stats count as Alarms\""
+        },
+        {
+            "role": "user",
+            "content": "SPL:\n\"| tstats count from datamodel=endpoints.callstatslogs where callstatslogs.RemoteProductName!=\"ooh323\" callstatslogs.ReceivedPacketLoss>=0 callstatslogs.ActualFPSRecv>=0 callstatslogs.CallDuration > 0 ($Endpoints$) ($InterfaceMode$) callstatslogs.RemoteProductName!=\"*Hold Server\" callstatslogs.ProductName!=\"*AndroidTV\" callstatslogs.RemoteProductName=\"Sorenson Videophone*\" by _time span=$timespan$, callstatslogs.Version, callstatslogs.VideoFrameSizeRecv, callstatslogs.CallDuration, callstatslogs.VideoTimeMutedByRemote, callstatslogs.$SplitBy$ | rename callstatslogs.VideoFrameSizeRecv as VideoFrameSizeRecv, callstatslogs.CallDuration as CallDuration, callstatslogs.VideoTimeMutedByRemote as VideoTimeMutedByRemote, callstatslogs.Version as Version, callstatslogs.Tunneled as Tunneled, callstatslogs.$SplitBy$ as $SplitBy$ | eval bvcount=if(VideoFrameSizeRecv==\"0 x 0\" AND (VideoTimeMutedByRemote==0 OR abs(CallDuration-VideoTimeMutedByRemote)>=1), count, 0) | stats sum(count) as allCalls, sum(bvcount) as BV by _time, $SplitBy$ | eval \"BlackVideoPerc\"=round(BV/allCalls * 100, 2) | timechart span=$timespan$ values(BlackVideoPerc) as BlackVideoPerc by $SplitBy$\""
+        },
+        {
+            "role": "assistant",
+            "content": "\"| dataset method=powerquery maxcount=100000 \nsearch=\"datamodel='endpoints.callstatslogs' \ncallstatslogs.RemoteProductName!='ooh323' \ncallstatslogs.ReceivedPacketLoss>=0 \ncallstatslogs.ActualFPSRecv>=0 \ncallstatslogs.CallDuration>0 \n($EndpointsSent$) \nNOT(callstatslogs.RemoteProductName contains 'Hold Server') \nNOT(callstatslogs.ProductName contains 'AndroidTV')  \n| let VideoFrameSizeRecv=callstatslogs.VideoFrameSizeRecv, \nCallDuration=callstatslogs.CallDuration, \nVideoTimeMutedByRemote=callstatslogs.VideoTimeMutedByRemote, \nVersion=callstatslogs.Version, \nTunneled=callstatslogs.Tunneled, \n$SplitBy$=callstatslogs.$SplitBy$ \n| group count=count() by \ntimestamp=timebucket('$timespan$'), \nVersion, VideoFrameSizeRecv, CallDuration, VideoTimeMutedByRemote, $SplitBy$\" \n| let bvcount=if(VideoFrameSizeRecv='0 x 0' AND (VideoTimeMutedByRemote=0 OR abs(CallDuration-VideoTimeMutedByRemote)>=1), count, 0) \n| stats sum(count) as allCalls, sum(bvcount) as BV by _time, ProductName \n| let BlackVideoPerc=round(BV/allCalls * 100, 2) \n| timechart span=$timespan$ values(BlackVideoPerc) as BlackVideoPerc by $SplitBy$ \n| fillnull\""
+        },
+        {
+            "role": "user",
+            "content": "SPL:\nindex=\"cc_apps\" host=\"*vca*\" Message=\"We are in call and received audio initially, but audio has stopped being received - call will be closed as Normal.\" OR Message=\"We are in a call but have not received any intial audio for a number of seconds!\"\n|timechart count by Message"
+        },
+        {
+            "role": "assistant",
+            "content": "\"| dataset method=powerquery maxcount=100000 \nsearch=\"index='cc_apps' host='*vca*' (Message='We are in call and received audio initially, but audio has stopped being received - call will be closed as Normal.' OR Message='We are in a call but have not received any initial audio for a number of seconds!')\" \n| timechart count by Message \n| fillnull\""
+        },
+        {
+            "role": "user",
+            "content": "index should be replaced with serverHost\nThe search field must have | group count=count() by timestamp=timebucket('1m'), Message\nthe host field must be host contains 'vca'\ntimechart command must be | timechart sum(count) by Message. The correct conversion is:\n\n| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host contains 'vca' Message='We are in call and received audio initially, but audio has stopped being received - call will be closed as Normal.' OR Message='We are in a call but have not received any intial audio for a number of seconds!'\n| group count=count() by timestamp=timebucket('1m'), Message\"\n| spath\n| timechart sum(count) by Message\n| fillnull"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host contains 'vca' (Message='We are in call and received audio initially, but audio has stopped being received - call will be closed as Normal.' OR Message='We are in a call but have not received any initial audio for a number of seconds!')\"\n| group count=count() by timestamp=timebucket('1m'), Message\n| spath\n| timechart sum(count) by Message\n| fillnull"
+        },
+        {
+            "role": "user",
+            "content": "index=\"cc_apps\" host=\"$stack$-cc-tux*\" sourcetype=\"ULOG\"\n| timechart count by host useother=f"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host='$stack$-cc-tux*' sourcetype='ULOG'\"\n| group count=count() by timestamp=timebucket('1m'), host\n| spath\n| timechart sum(count) by host useother=f\n| fillnull"
+        },
+        {
+            "role": "user",
+            "content": "There are corrections in host field and placing double quotes. The correct query is:\n\n| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host contains '$stack$-cc-tux' sourcetype contains 'ULOG'\n| group count=count() by timestamp=timebucket('1m'), host\" \n| spath \n| timechart sum(count) by host useother=f\n| fillnull"
+        },
+        {
+            "role": "assistant",
+            "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host contains '$stack$-cc-tux' sourcetype contains 'ULOG'\"\n| group count=count() by timestamp=timebucket('1m'), host\n| spath\n| timechart sum(count) by host useother=f\n| fillnull"
+        }
+    ]
+}

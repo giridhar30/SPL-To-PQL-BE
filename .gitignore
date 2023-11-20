@@ -1,5 +1,6 @@
 openai-api-key.txt
 SPL-to-PQL-DataSet.xlsx
+*backup*
 
 /.idea
 /__pycache__

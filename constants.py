@@ -34,7 +34,7 @@ def reset_presets_to_base(mode):
     """
     global PRESETS
     PRESETS = BASE_PRESETS.copy()
-    if (mode == "hard"):
+    if mode == "hard":
         save_presets()
 
 
@@ -44,6 +44,7 @@ def save_presets():
     """
     with open(PRESETS_FILE, 'w') as file:
         json.dump(PRESETS, file, indent=4)
+
 
 def add_new_preset(name, messages):
     """
