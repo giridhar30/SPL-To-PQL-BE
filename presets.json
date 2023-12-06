@@ -133,7 +133,6 @@
             "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host contains '$stack$-vca' sourcetype='VCA' Message='Call Completed'\n| group count=count() by TerminationType\" \n| spath \n| stats sum(count) by TerminationType"
         }
     ],
-    "powerquery": [],
     "inputlookup": [
         {
             "role": "system",
@@ -226,6 +225,132 @@
         {
             "role": "assistant",
             "content": "| dataset method=powerquery maxcount=100000 search=\"serverHost='cc_apps' host contains '$stack$-cc-tux' sourcetype contains 'ULOG'\"\n| group count=count() by timestamp=timebucket('1m'), host\n| spath\n| timechart sum(count) by host useother=f\n| fillnull"
+        }
+    ],
+    "powerquery_alerts": [
+        {
+            "role": "system",
+            "content": "You should convert Splunk SPL to Scalyr DataSet PQL. The first few conversations will have the converted PQL. When only the SPL is given, you have to convert it to PQL. index field should be converted to serverHost. Convert stats to group command. Ignore renames. Enclose all values within single quotes. Learn other conditions with the sample sets of SPL and PQL queries."
+        },
+        {
+            "role": "user",
+            "content": "sourcetype='aws:cloudtrail' eventSource=ecr.amazonaws.com eventName=PutImage NOT `aws_ecr_users` | rename requestParameters.* as * | rename repositoryName AS image | eval phase=\"release\" | eval severity=\"high\" | stats min(_time) as firstTime max(_time) as lastTime by awsRegion, eventName, eventSource, user, userName, src_ip, imageTag, registryId, image, phase, severity | `security_content_ctime(firstTime)` | `security_content_ctime(lastTime)`"
+        },
+        {
+            "role": "assistant",
+            "content": "sourcetype='aws:cloudtrail' eventSource='ecr.amazonaws.com' eventName='PutImage' (date_hour>=20 OR date_hour<8 OR date_wday='saturday' OR date_wday='sunday')\n| let image=requestParameters.repositoryName\n| let phase=\"release\"\n| let severity=\"medium\"\n| stats first(firstTime) as firstTime, last(lastTime) as lastTime by awsRegion, eventName, eventSource, user, userName, src_ip, requestParameters.imageTag AS imageTag, requestParameters.registryId AS registryId, image, phase, severity"
+        },
+        {
+            "role": "user",
+            "content": "sourcetype='aws:cloudtrail' eventSource=iam.amazonaws.com eventName=DeleteGroup errorCode IN (NoSuchEntityException,DeleteConflictException, AccessDenied) (userAgent!=*.amazonaws.com) | stats count min(_time) as firstTime max(_time) as lastTime values(requestParameters.groupName) as group_name by src eventName eventSource aws_account_id errorCode errorMessage userAgent eventID awsRegion userIdentity.principalId user_arn | `security_content_ctime(firstTime)` | `security_content_ctime(lastTime)`"
+        },
+        {
+            "role": "assistant",
+            "content": "sourcetype='aws:cloudtrail' eventSource='iam.amazonaws.com' eventName='DeleteGroup' errorCode IN ('NoSuchEntityException', 'DeleteConflictException', 'AccessDenied') NOT (userAgent contains '.amazonaws.com')\n| stats count, firstTime=strftime(min(timestamp), '%D %H:%m:%S'), lastTime=strftime(max(timestamp), '%D %H:%m:%S'), group_name=array_agg_distinct(requestParameters.groupName)\nby src, eventName, eventSource, aws_account_id, errorCode, errorMessage, userAgent, eventID, awsRegion, userIdentity.principalId, user_arn"
+        },
+        {
+            "role": "user",
+            "content": "sourcetype='aws:cloudtrail' eventSource=\"rds.amazonaws.com\" eventName=ModifyDBInstance \"requestParameters.masterUserPassword\"=* | stats count min(_time) as firstTime max(_time) as lastTime values(requestParameters.dBInstanceIdentifier) as DB by sourceIPAddress awsRegion eventName userAgent| `security_content_ctime(firstTime)`| `security_content_ctime(lastTime)`"
+        },
+        {
+            "role": "assistant",
+            "content": "sourcetype='aws:cloudtrail' eventSource=\"rds.amazonaws.com\" eventName='ModifyDBInstance' \"requestParameters.masterUserPassword\"=*\n| group count=count(), firstTime=strftime(min(timestamp), '%D %H:%m:%S'), lastTime=strftime(max(timestamp), '%D %H:%m:%S'), DB=array_agg_distinct(requestParameters.dBInstanceIdentifier)\nby sourceIPAddress, awsRegion, eventName, userAgent"
+        },
+        {
+            "role": "user",
+            "content": "sourcetype='aws:cloudtrail' eventName=Describe* OR eventName=List* OR eventName=Get*  | stats dc(eventName) as dc_events min(_time) as firstTime max(_time) as lastTime values(eventName) as eventName values(src) as src values(userAgent) as userAgent by user userIdentity.arn | where dc_events > 50 | `security_content_ctime(firstTime)` | `security_content_ctime(lastTime)`"
+        },
+        {
+            "role": "assistant",
+            "content": "sourcetype='aws:cloudtrail' (eventName contains 'Describe' OR eventName contains 'List' OR eventName contains 'Get')\n| group dc_events=estimate_distinct(eventName), firstTime=strftime(min(timestamp), '%D %H:%m:%S'), lastTime=strftime(max(timestamp), '%D %H:%m:%S'), eventName=array_agg_distinct(eventName), src=array_agg_distinct(src), userAgent=array_agg_distinct(userAgent) \nby user, userIdentity.arn \n| filter dc_events > 50"
+        },
+        {
+            "role": "user",
+            "content": "sourcetype='aws:cloudtrail' eventName=GetPasswordData eventSource = ec2.amazonaws.com |  bin _time span=5m |  stats count values(errorCode) as errorCode dc(requestParameters.instanceId) as distinct_instance_ids values(requestParameters.instanceId) as instance_ids by aws_account_id src_ip user_arn userAgent eventName _time |  where distinct_instance_ids > 10"
+        },
+        {
+            "role": "assistant",
+            "content": "sourcetype='aws:cloudtrail' eventName='GetPasswordData' eventSource='ec2.amazonaws.com'\n| group count(), errorCode=array_agg_distinct(errorCode), distinct_instance_ids=estimate_distinct(requestParameters.instanceId), instance_ids=array_agg_distinct(requestParameters.instanceId)\nby aws_account_id, src_ip, user_arn, userAgent, eventName, timestamp=timebucket('5m')\n| filter distinct_instance_ids > 10"
+        },
+        {
+            "role": "user",
+            "content": "sourcetype='aws:cloudtrail' eventName = CreateTask eventSource=\"datasync.amazonaws.com\" | rename  requestParameters.*  as *  | stats count min(_time) as firstTime max(_time) as lastTime by src_ip aws_account_id awsRegion eventName destinationLocationArn sourceLocationArn userAgent user_arn userIdentity.principalId  errorCode"
+        },
+        {
+            "role": "assistant",
+            "content": "sourcetype=aws:cloudtrail eventName ='CreateTask' eventSource='datasync.amazonaws.com' | group count =count(),firstTime=strftime(min(timestamp), '%D %H:%m:%S'), lastTime=strftime(max(timestamp)) by src_ip ,aws_account_id ,awsRegion, eventName ,destinationLocationArn ,sourceLocationArn ,userAgent ,user_arn ,userIdentity.principalId  ,errorCode"
+        },
+        {
+            "role": "user",
+            "content": "(eventtype=wineventlog_security OR Channel=security OR source=XmlWinEventLog:Security) EventCode=1100 | stats count min(_time) as firstTime max(_time) as lastTime by dest Message EventCode | `security_content_ctime(firstTime)` | `security_content_ctime(lastTime)`"
+        },
+        {
+            "role": "assistant",
+            "content": "(eventtype=wineventlog_security OR Channel=security OR serverHost='XmlWinEventLog:Security') EventCode=1100\n| group count=count(), firstTime=strftime(min(timestamp), '%D %H:%m:%S'), lastTime=strftime(max(timestamp), '%D %H:%m:%S'), dest, Message, EventCode\n| `security_content_ctime(firstTime)`\n| `security_content_ctime(lastTime)`"
+        },
+        {
+            "role": "user",
+            "content": "enclose all values with single quotes. Remove values within ``"
+        },
+        {
+            "role": "assistant",
+            "content": "(eventtype='wineventlog_security' OR Channel='security' OR serverHost='XmlWinEventLog:Security') EventCode='1100'\n| group count=count(), firstTime=strftime(min(timestamp), '%D %H:%m:%S'), lastTime=strftime(max(timestamp), '%D %H:%m:%S'), dest, Message, EventCode\n| 'security_content_ctime'(firstTime)\n| 'security_content_ctime'(lastTime)"
+        },
+        {
+            "role": "user",
+            "content": "Correct conversion:\n\n(eventtype='wineventlog_security' OR Channel='security' OR serverHost='XmlWinEventLog:Security') EventCode='1100'\n| group count=count(), firstTime=strftime(min(timestamp), '%D %H:%m:%S'), lastTime=strftime(max(timestamp), '%D %H:%m:%S'), dest, Message, EventCode"
+        },
+        {
+            "role": "assistant",
+            "content": "(eventtype='wineventlog_security' OR Channel='security' OR serverHost='XmlWinEventLog:Security') EventCode='1100'\n| group count=count(), firstTime=strftime(min(timestamp), '%D %H:%m:%S'), lastTime=strftime(max(timestamp), '%D %H:%m:%S'), dest, Message, EventCode"
+        },
+        {
+            "role": "user",
+            "content": "source=ActiveDirectory admonEventType=Update objectCategory=\"CN=Group-Policy-Container,CN=Schema,CN=Configuration,DC=*\" (displayName=\"Default Domain Policy\" OR displayName=\"Default Domain Controllers Policy\") | stats min(_time) as firstTime max(_time) as lastTime values(gPCFileSysPath) by dcName, displayName "
+        },
+        {
+            "role": "assistant",
+            "content": "source='ActiveDirectory' admonEventType='Update' objectCategory=\"CN=Group-Policy-Container,CN=Schema,CN=Configuration,DC=*\"\n(displayName='Default Domain Policy' OR displayName='Default Domain Controllers Policy')\n| group firstTime=strftime(min(timestamp), '%D %H:%m:%S'), lastTime=strftime(max(timestamp), '%D %H:%m:%S'), gPCFileSysPath=array_agg_distinct(gPCFileSysPath)\nby dcName, displayName"
+        },
+        {
+            "role": "user",
+            "content": "sourcetype=mscs:azure:audit operationName.localizedValue=\"Create or Update an Azure Automation account\" status.value=Succeeded | stats values(object) by _time, caller, claims.ipaddr, resourceGroupName, object_path"
+        },
+        {
+            "role": "assistant",
+            "content": "sourcetype='mscs:azure:audit' operationName.localizedValue='Create or Update an Azure Automation account' status.value='Succeeded'\n| group object=array_agg_distinct(object)\nby timestamp=timebucket('1h'), caller, claims.ipaddr, resourceGroupName, object_path"
+        },
+        {
+            "role": "user",
+            "content": "sourcetype=mscs:azure:audit operationName.localizedValue=\"Create or Update an Azure Automation Runbook\" object!=AzureAutomationTutorial* status.value=Succeeded | dedup object | stats values(object) by _time, caller, claims.ipaddr, resourceGroupName, object_path"
+        },
+        {
+            "role": "assistant",
+            "content": "sourcetype='mscs:azure:audit' operationName.localizedValue='Create or Update an Azure Automation Runbook' NOT (object contains 'AzureAutomationTutorial') status.value='Succeeded'\n| group object=array_agg_distinct(object)\nby timestamp=timebucket('1h'), caller, claims.ipaddr, resourceGroupName, object_path"
+        },
+        {
+            "role": "user",
+            "content": "sourcetype=mscs:azure:audit operationName.localizedValue=\"Create or Update an Azure Automation webhook\" status.value=Succeeded | stats values(object) by _time, caller, claims.ipaddr, resourceGroupName, object_path"
+        },
+        {
+            "role": "assistant",
+            "content": "sourcetype='mscs:azure:audit' operationName.localizedValue='Create or Update an Azure Automation webhook' status.value='Succeeded'\n| group object=array_agg_distinct(object)\nby timestamp=timebucket('1h'), caller, claims.ipaddr, resourceGroupName, object_path"
+        },
+        {
+            "role": "user",
+            "content": "sourcetype=mscs:azure:eventhub body.category=SignInLogs body.properties.authenticationRequirement=singleFactorAuthentication body.properties.authenticationDetails{}.succeeded=true | rename body.properties.* as * |  stats values(userPrincipalName) by _time, ipAddress, appDisplayName, authenticationRequirement"
+        },
+        {
+            "role": "assistant",
+            "content": "sourcetype='mscs:azure:eventhub' body.category='SignInLogs' body.properties.authenticationRequirement='singleFactorAuthentication' body.properties.authenticationDetails{}.succeeded=true\n| group userPrincipalName=array_agg_distinct(body.properties.userPrincipalName)\nby timestamp=timebucket('1h'), ipAddress, appDisplayName, authenticationRequirement"
+        },
+        {
+            "role": "user",
+            "content": "sourcetype=o365:management:activity  Operation=\"Disable Strong Authentication.\" | stats count earliest(_time) as firstTime latest(_time) as lastTime by UserType Operation UserId ResultStatus object | rename UserType AS user_type, Operation AS action, UserId AS src_user, object AS user, ResultStatus AS result"
+        },
+        {
+            "role": "assistant",
+            "content": "sourcetype='o365:management:activity' Operation='Disable Strong Authentication.'\n| group count=count(), firstTime=strftime(min(timestamp), '%D %H:%m:%S'), lastTime=strftime(max(timestamp), '%D %H:%m:%S') by UserType, Operation, UserId, ResultStatus, object"
         }
     ]
 }

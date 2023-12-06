@@ -31,7 +31,7 @@ def convert_spl_to_pql():
 
     # Call the OpenAI API
     try:
-        spl_code = replace_or_remove_macros(query, "SQL.csv")
+        spl_code = replace_or_remove_macros(spl_code, "SQL.csv")
         # Prepare the data object using converter.py
         data = converter.prepare_data(spl_code, preset)
 
