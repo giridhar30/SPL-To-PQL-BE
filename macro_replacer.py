@@ -1,6 +1,7 @@
 import pandas as pd
 import re
 
+
 def replace_or_remove_macros(query, csv_file):
     # Load the CSV file
     macros_df = pd.read_csv(csv_file)
@@ -23,10 +24,3 @@ def replace_or_remove_macros(query, csv_file):
     query = query.rstrip(' |')
 
     return query
-
-# Your query with macros
-query = "`cloudtrail` eventName = PutBucketReplication eventSource = s3.amazonaws.com | rename requestParameters.* as * | stats count values(bucketName) as source_bucket values(ReplicationConfiguration.Rule.ID) as rule_id values(ReplicationConfiguration.Rule.Destination.Bucket) as destination_bucket by _time user_arn userName user_type src_ip aws_account_id userIdentity.principalId user_agent | `aws_exfiltration_via_ec2_snapshot_filter`"
-
-# Replace macros in the query or remove them if the definition is 'search *'
-updated_query = replace_or_remove_macros(query, "SQL.csv")
-print(updated_query)
