@@ -4,15 +4,13 @@ from macro_replacer import replace_or_remove_macros
 
 import constants
 import converter
-import openai
+from openai import OpenAI
 import openai_api_key
 
 app = Flask(__name__)
 CORS(app)
 
-# loading the API key to the env
-openai.api_key = openai_api_key.load()
-
+client = OpenAI()
 
 # API routes to be defined here
 @app.route('/', methods=['GET'])
@@ -35,8 +33,8 @@ def convert_spl_to_pql():
         # Prepare the data object using converter.py
         data = converter.prepare_data(spl_code, preset)
 
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo-16k-0613",
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
             messages=data["messages"],
             temperature=0,
             max_tokens=4011,
@@ -45,7 +43,7 @@ def convert_spl_to_pql():
             presence_penalty=0
         )
         # Extract the PQL code from the response
-        pql_code = response.choices[0].message['content']  # Adjust based on actual response structure
+        pql_code = response.choices[0].message.content  # Adjust based on actual response structure
         return {'pql_code': pql_code}
     except Exception as e:
         # Handle exceptions and provide feedback
